@@ -70,6 +70,7 @@ class AbstractCognitoBackend(ModelBackend):
             settings.COGNITO_APP_ID,
             access_key=getattr(settings, 'AWS_ACCESS_KEY_ID', None),
             secret_key=getattr(settings, 'AWS_SECRET_ACCESS_KEY', None),
+            user_pool_region=getattr(settings, 'AWS_USER_POOL_REGION', None),
             username=username)
         try:
             cognito_user.authenticate(password)
@@ -94,6 +95,7 @@ class AbstractCognitoBackend(ModelBackend):
 
 
 class CognitoBackend(AbstractCognitoBackend):
+
     def authenticate(self, request, username=None, password=None):
         """
         Authenticate a Cognito User and store an access, ID and
@@ -107,3 +109,51 @@ class CognitoBackend(AbstractCognitoBackend):
             request.session['REFRESH_TOKEN'] = user.refresh_token
             request.session.save()
         return user
+
+    def register(self, username,
+                 password,
+                 email,
+                 first_name,
+                 last_name):
+        '''Register user with cognito
+
+        :param username: Cognito Username
+        :param password: Cognito Password
+        :param email: Email
+        :param first_name: First name
+        :param last_name: Last name
+        :returns: Response from Cognito
+        '''
+        cognito_user = CognitoUser(
+            settings.COGNITO_USER_POOL_ID,
+            settings.COGNITO_APP_ID,
+            access_key=getattr(settings, 'AWS_ACCESS_KEY_ID', None),
+            secret_key=getattr(settings, 'AWS_SECRET_ACCESS_KEY', None),
+            user_pool_region=getattr(settings, 'AWS_USER_POOL_REGION', None),
+            username=username)
+
+        try:
+            cognito_user.add_base_attributes(**{'given_name': first_name,
+                                                'family_name': last_name,
+                                                'email': email})
+            response = cognito_user.register(username, password)
+        except (Boto3Error, ClientError) as e:
+            return self.handle_error_response(e)
+
+        return response
+
+    def validate_user(self, confirmation_code, username):
+        '''Validate user account with confirmation code sent by AWS
+
+        :param confirmation_code: Confirmation code received from Cognito
+        :param username: Cognito Username
+        '''
+        cognito_user = CognitoUser(
+            settings.COGNITO_USER_POOL_ID,
+            settings.COGNITO_APP_ID,
+            access_key=getattr(settings, 'AWS_ACCESS_KEY_ID', None),
+            secret_key=getattr(settings, 'AWS_SECRET_ACCESS_KEY', None),
+            user_pool_region=getattr(settings, 'AWS_USER_POOL_REGION', None),
+            username=username)
+        cognito_user.confirm_sign_up(confirmation_code,
+                                     username=username)
