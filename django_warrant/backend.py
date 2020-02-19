@@ -30,9 +30,14 @@ class CognitoUser(Cognito):
             if k not in django_fields:
                 extra_attrs.update({k: user_attrs.pop(k, None)})
         if getattr(settings, 'COGNITO_CREATE_UNKNOWN_USERS', True):
-            user, created = CognitoUser.user_class.objects.update_or_create(
-                username=username or email,
-                defaults=user_attrs)
+            if username:
+                user, created = CognitoUser.user_class.objects.update_or_create(
+                    username=username,
+                    defaults=user_attrs)
+            elif email:
+                user, created = CognitoUser.user_class.objects.update_or_create(
+                    email=email,
+                    defaults=user_attrs)
         else:
             try:
                 user = CognitoUser.user_class.objects.get(username=username or email)
@@ -101,8 +106,12 @@ class CognitoBackend(AbstractCognitoBackend):
         Authenticate a Cognito User and store an access, ID and
         refresh token in the session.
         """
-        user = super(CognitoBackend, self).authenticate(
-            username=username or email, password=password)
+        if username:
+            user = super(CognitoBackend, self).authenticate(
+                username=username, password=password)
+        elif email:
+            user = super(CognitoBackend, self).authenticate(
+                email=email, password=password)
         if user:
             request.session['ACCESS_TOKEN'] = user.access_token
             request.session['ID_TOKEN'] = user.id_token
