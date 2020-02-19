@@ -22,7 +22,7 @@ class CognitoUser(Cognito):
                                    }
                                    )
 
-    def get_user_obj(self,username=None,attribute_list=[],metadata={},attr_map={}):
+    def get_user_obj(self,username=None,email=None,attribute_list=[],metadata={},attr_map={}):
         user_attrs = cognito_to_dict(attribute_list,CognitoUser.COGNITO_ATTR_MAPPING)
         django_fields = [f.name for f in CognitoUser.user_class._meta.get_fields()]
         extra_attrs = {}
@@ -31,11 +31,11 @@ class CognitoUser(Cognito):
                 extra_attrs.update({k: user_attrs.pop(k, None)})
         if getattr(settings, 'COGNITO_CREATE_UNKNOWN_USERS', True):
             user, created = CognitoUser.user_class.objects.update_or_create(
-                username=username,
+                username=username or email,
                 defaults=user_attrs)
         else:
             try:
-                user = CognitoUser.user_class.objects.get(username=username)
+                user = CognitoUser.user_class.objects.get(username=username or email)
                 for k, v in user_attrs.items():
                     setattr(user, k, v)
                 user.save()
@@ -57,10 +57,11 @@ class AbstractCognitoBackend(ModelBackend):
     COGNITO_USER_CLASS = CognitoUser
 
     @abc.abstractmethod
-    def authenticate(self, username=None, password=None):
+    def authenticate(self, username=None, email=None, password=None):
         """
         Authenticate a Cognito User
         :param username: Cognito username
+        :param email: Cognito email
         :param password: Cognito password
         :return: returns User instance of AUTH_USER_MODEL or None
         """
@@ -70,7 +71,7 @@ class AbstractCognitoBackend(ModelBackend):
             access_key=getattr(settings, 'AWS_ACCESS_KEY_ID', None),
             secret_key=getattr(settings, 'AWS_SECRET_ACCESS_KEY', None),
             user_pool_region=getattr(settings, 'AWS_USER_POOL_REGION', None),
-            username=username)
+            username=username or email)
         try:
             cognito_user.authenticate(password)
         except (Boto3Error, ClientError) as e:
@@ -95,13 +96,13 @@ class AbstractCognitoBackend(ModelBackend):
 
 class CognitoBackend(AbstractCognitoBackend):
 
-    def authenticate(self, request, username=None, password=None):
+    def authenticate(self, request, username=None, email=None, password=None):
         """
         Authenticate a Cognito User and store an access, ID and
         refresh token in the session.
         """
         user = super(CognitoBackend, self).authenticate(
-            username=username, password=password)
+            username=username or email, password=password)
         if user:
             request.session['ACCESS_TOKEN'] = user.access_token
             request.session['ID_TOKEN'] = user.id_token
@@ -129,7 +130,7 @@ class CognitoBackend(AbstractCognitoBackend):
             access_key=getattr(settings, 'AWS_ACCESS_KEY_ID', None),
             secret_key=getattr(settings, 'AWS_SECRET_ACCESS_KEY', None),
             user_pool_region=getattr(settings, 'AWS_USER_POOL_REGION', None),
-            username=username)
+            username=username or email)
 
         try:
             cognito_user.add_base_attributes(**{'given_name': first_name,
