@@ -30,17 +30,20 @@ class CognitoUser(Cognito):
             if k not in django_fields:
                 extra_attrs.update({k: user_attrs.pop(k, None)})
         if getattr(settings, 'COGNITO_CREATE_UNKNOWN_USERS', True):
-            if '@' not in username:
+            if '@' in username:
                 user, created = CognitoUser.user_class.objects.update_or_create(
-                    username=username,
+                    email=username,
                     defaults=user_attrs)
             else:
                 user, created = CognitoUser.user_class.objects.update_or_create(
-                    email=email,
+                    username=username,
                     defaults=user_attrs)
         else:
             try:
-                user = CognitoUser.user_class.objects.get(username=username or email)
+                if '@' in username:
+                    user = CognitoUser.user_class.objects.get(email=username)
+                else:
+                    user = CognitoUser.user_class.objects.get(username=username)
                 for k, v in user_attrs.items():
                     setattr(user, k, v)
                 user.save()
